@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/x509"
 	"encoding/json"
-	"encoding/hex"
 	
 	"flag"
 	"io"
