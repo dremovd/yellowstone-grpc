@@ -5,6 +5,7 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"encoding/hex"
+	
 	"flag"
 	"io"
 	"log"
@@ -18,6 +19,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/metadata"
+	"github.com/mr-tron/base58"
 )
 
 var (
@@ -249,7 +251,7 @@ func grpc_subscribe(conn *grpc.ClientConn) {
 		resp, err := stream.Recv()
 		timestamp := time.Now().UnixNano()
 		signature := resp.GetTransaction().GetTransaction().GetSignature()
-		hexSignature := hex.EncodeToString(signature)
+		base58Signature := base58.Encode(signature)
 
 		if err == io.EOF {
 			return
@@ -258,6 +260,6 @@ func grpc_subscribe(conn *grpc.ClientConn) {
 			log.Fatalf("Error occurred in receiving update: %v", err)
 		}
 
-		log.Printf("%v %v", timestamp, hexSignature)
+		log.Printf("%v %v", timestamp, base58Signature)
 	}
 }
