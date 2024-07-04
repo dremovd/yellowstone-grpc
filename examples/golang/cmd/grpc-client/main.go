@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/x509"
 	"encoding/json"
+	"encoding/hex"
 	"flag"
 	"io"
 	"log"
@@ -247,6 +248,8 @@ func grpc_subscribe(conn *grpc.ClientConn) {
 
 		resp, err := stream.Recv()
 		timestamp := time.Now().UnixNano()
+		signature := resp.GetTransaction().GetTransaction().GetSignature()
+		hexSignature := hex.EncodeToString(signature)
 
 		if err == io.EOF {
 			return
@@ -255,6 +258,6 @@ func grpc_subscribe(conn *grpc.ClientConn) {
 			log.Fatalf("Error occurred in receiving update: %v", err)
 		}
 
-		log.Printf("%v %v", timestamp, resp)
+		log.Printf("%v %v", timestamp, hexSignature)
 	}
 }
