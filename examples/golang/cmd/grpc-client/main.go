@@ -291,7 +291,7 @@ func grpc_subscribe(conn *grpc.ClientConn) {
 	}
 
 	var i uint = 0
-	for {
+	for i < 1000 {
 		i += 1
 		if i == *resub {
 			subscription = pb.SubscribeRequest{}
@@ -320,6 +320,5 @@ func grpc_subscribe(conn *grpc.ClientConn) {
 		// transaction := resp.GetTransaction().GetTransaction().String();
 
 		log.Printf("%v\t%v\t%v", timestamp, base58Signature, processedJSON)
-		break
 	}
 }
