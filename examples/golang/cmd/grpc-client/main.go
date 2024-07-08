@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 
 	"flag"
+	"fmt"
 	"io"
 	"log"
 	"net/url"
@@ -205,7 +206,7 @@ func sendToKafka(signature []byte) error {
 
 	err := kafkaWriter.WriteMessages(context.Background(), message)
 	if err != nil {
-		return log.Printf("failed to write message: %v", err)
+		return fmt.Errorf("failed to write message: %w", err)
 	}
 
 	return nil
