@@ -5,7 +5,7 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"encoding/base64"
-	
+
 	"flag"
 	"io"
 	"log"
@@ -70,15 +70,21 @@ func protoToJSON(msg proto.Message) string {
 func processValue(v interface{}) interface{} {
     switch val := v.(type) {
     case string:
-        // Try to decode as base64 first
+        // Try to parse as integer first
+        if intVal, err := strconv.ParseInt(val, 10, 64); err == nil {
+            return intVal
+        }
+        // If not an integer, process as before
         decoded, err := base64.StdEncoding.DecodeString(val)
         if err == nil {
-            // If it's valid base64, it's likely binary data
             return base58.Encode(decoded)
         }
-        // If it's not base64, check if it might be binary
         if len(val) > 0 && (val[0] <= 32 || val[0] >= 127) {
             return base58.Encode([]byte(val))
+        }
+    case float64:
+        if float64(int64(val)) == val {
+            return int64(val)
         }
     case []interface{}:
         for i, item := range val {
