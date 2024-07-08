@@ -272,7 +272,7 @@ func grpc_subscribe(conn *grpc.ClientConn) {
 	if err != nil {
 		log.Printf("Failed to marshal subscription request: %v", subscriptionJson)
 	}
-	log.Printf("Subscription request: %s", string(subscriptionJson))
+	// log.Printf("Subscription request: %s", string(subscriptionJson))
 
 	// Set up the subscription request
 	ctx := context.Background()
@@ -291,6 +291,7 @@ func grpc_subscribe(conn *grpc.ClientConn) {
 	}
 
 	var i uint = 0
+	log.Printf("%v\t%v\t%v", "timestamp", "signature", "transaction_json")
 	for i < 1000 {
 		i += 1
 		if i == *resub {
