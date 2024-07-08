@@ -66,6 +66,25 @@ func protoToJSON(msg proto.Message) string {
 	return jsonStr
 }
 
+// Helper function to process values and encode binary data to base58
+func processValue(v interface{}) interface{} {
+	switch val := v.(type) {
+	case string:
+		if len(val) > 0 && (val[0] <= 32 || val[0] >= 127) {
+			return base58.Encode([]byte(val))
+		}
+	case []interface{}:
+		for i, item := range val {
+			val[i] = processValue(item)
+		}
+	case map[string]interface{}:
+		for k, item := range val {
+			val[k] = processValue(item)
+		}
+	}
+	return v
+}
+
 // Helper function to process the JSON and encode binary data to base58
 func processJSON(jsonStr string) string {
 	var jsonData interface{}
@@ -73,24 +92,6 @@ func processJSON(jsonStr string) string {
 	if err != nil {
 		log.Printf("Error unmarshaling JSON: %v", err)
 		return jsonStr
-	}
-
-	processValue := func(v interface{}) interface{} {
-		switch val := v.(type) {
-		case string:
-			if len(val) > 0 && (val[0] <= 32 || val[0] >= 127) {
-				return base58.Encode([]byte(val))
-			}
-		case []interface{}:
-			for i, item := range val {
-				val[i] = processValue(item)
-			}
-		case map[string]interface{}:
-			for k, item := range val {
-				val[k] = processValue(item)
-			}
-		}
-		return v
 	}
 
 	processedData := processValue(jsonData)
@@ -102,7 +103,6 @@ func processJSON(jsonStr string) string {
 
 	return string(processedJSON)
 }
-
 
 func main() {
 	log.SetFlags(0)
