@@ -341,6 +341,11 @@ func grpc_subscribe(conn *grpc.ClientConn) {
 
 	var i uint = 0
 	log.Printf("%v\t%v\t%v", "timestamp", "signature", "transaction_json")
+
+	// Initialize Kafka writer
+	initKafkaWriter()
+	defer closeKafkaWriter()
+
 	for i < 1000 {
 		i += 1
 		if i == *resub {
