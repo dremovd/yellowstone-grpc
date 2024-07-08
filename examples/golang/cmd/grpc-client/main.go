@@ -19,6 +19,8 @@ import (
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/metadata"
 	"github.com/mr-tron/base58"
+	"github.com/golang/protobuf/jsonpb"
+	"github.com/golang/protobuf/proto"
 )
 
 var (
@@ -49,6 +51,58 @@ var kacp = keepalive.ClientParameters{
 	Timeout:             time.Second,      // wait 1 second for ping ack before considering the connection dead
 	PermitWithoutStream: true,             // send pings even without active streams
 }
+
+// Helper function to convert protobuf to JSON string
+func protoToJSON(msg proto.Message) string {
+	marshaler := jsonpb.Marshaler{
+		EmitDefaults: true,
+		OrigName:     true,
+	}
+	jsonStr, err := marshaler.MarshalToString(msg)
+	if err != nil {
+		log.Printf("Error marshaling to JSON: %v", err)
+		return ""
+	}
+	return jsonStr
+}
+
+// Helper function to process the JSON and encode binary data to base58
+func processJSON(jsonStr string) string {
+	var jsonData interface{}
+	err := json.Unmarshal([]byte(jsonStr), &jsonData)
+	if err != nil {
+		log.Printf("Error unmarshaling JSON: %v", err)
+		return jsonStr
+	}
+
+	processValue := func(v interface{}) interface{} {
+		switch val := v.(type) {
+		case string:
+			if len(val) > 0 && (val[0] <= 32 || val[0] >= 127) {
+				return base58.Encode([]byte(val))
+			}
+		case []interface{}:
+			for i, item := range val {
+				val[i] = processValue(item)
+			}
+		case map[string]interface{}:
+			for k, item := range val {
+				val[k] = processValue(item)
+			}
+		}
+		return v
+	}
+
+	processedData := processValue(jsonData)
+	processedJSON, err := json.Marshal(processedData)
+	if err != nil {
+		log.Printf("Error marshaling processed JSON: %v", err)
+		return jsonStr
+	}
+
+	return string(processedJSON)
+}
+
 
 func main() {
 	log.SetFlags(0)
@@ -239,7 +293,6 @@ func grpc_subscribe(conn *grpc.ClientConn) {
 	var i uint = 0
 	for {
 		i += 1
-		// Example of how to resubscribe/update request
 		if i == *resub {
 			subscription = pb.SubscribeRequest{}
 			subscription.Slots = make(map[string]*pb.SubscribeRequestFilterSlots)
@@ -258,9 +311,15 @@ func grpc_subscribe(conn *grpc.ClientConn) {
 		if err != nil {
 			log.Fatalf("Error occurred in receiving update: %v", err)
 		}
+		// Convert the entire response to JSON
+		jsonStr := protoToJSON(resp)
 
-		transaction := resp.GetTransaction().GetTransaction().String();
+		// Process the JSON to encode binary data as base58
+		processedJSON := processJSON(jsonStr)
 
-		log.Printf("%v\t%v\t%v", timestamp, base58Signature, transaction)
+		// transaction := resp.GetTransaction().GetTransaction().String();
+
+		log.Printf("%v\t%v\t%v", timestamp, base58Signature, processedJSON)
+		break
 	}
 }
