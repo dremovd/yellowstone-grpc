@@ -352,7 +352,7 @@ func grpc_subscribe(conn *grpc.ClientConn) {
 		resp, err := stream.Recv()
 		timestamp := time.Now().UnixNano()
 		signature := resp.GetTransaction().GetTransaction().GetSignature()
-		base58Signature := base58.Encode(signature)
+		// base58Signature := base58.Encode(signature)
 
 		if err == io.EOF {
 			return
@@ -363,7 +363,7 @@ func grpc_subscribe(conn *grpc.ClientConn) {
 		// jsonStr := protoToJSON(resp)
 		// processedJSON := processJSON(jsonStr)
 		// log.Printf("%v\t%v\t%v", timestamp, base58Signature, processedJSON)
-		
+
 		// Send the signature to Kafka
 		err = sendToKafka(signature)
 		if err != nil {
