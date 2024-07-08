@@ -259,6 +259,8 @@ func grpc_subscribe(conn *grpc.ClientConn) {
 			log.Fatalf("Error occurred in receiving update: %v", err)
 		}
 
-		log.Printf("%v %v", timestamp, base58Signature)
+		transaction := resp.GetTransaction().GetTransaction().String();
+
+		log.Printf("%v\t%v\t%v", timestamp, base58Signature, transaction)
 	}
 }
