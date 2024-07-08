@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/x509"
 	"encoding/json"
+	"encoding/base64"
 	
 	"flag"
 	"io"
@@ -66,23 +67,29 @@ func protoToJSON(msg proto.Message) string {
 	return jsonStr
 }
 
-// Helper function to process values and encode binary data to base58
 func processValue(v interface{}) interface{} {
-	switch val := v.(type) {
-	case string:
-		if len(val) > 0 && (val[0] <= 32 || val[0] >= 127) {
-			return base58.Encode([]byte(val))
-		}
-	case []interface{}:
-		for i, item := range val {
-			val[i] = processValue(item)
-		}
-	case map[string]interface{}:
-		for k, item := range val {
-			val[k] = processValue(item)
-		}
-	}
-	return v
+    switch val := v.(type) {
+    case string:
+        // Try to decode as base64 first
+        decoded, err := base64.StdEncoding.DecodeString(val)
+        if err == nil {
+            // If it's valid base64, it's likely binary data
+            return base58.Encode(decoded)
+        }
+        // If it's not base64, check if it might be binary
+        if len(val) > 0 && (val[0] <= 32 || val[0] >= 127) {
+            return base58.Encode([]byte(val))
+        }
+    case []interface{}:
+        for i, item := range val {
+            val[i] = processValue(item)
+        }
+    case map[string]interface{}:
+        for k, item := range val {
+            val[k] = processValue(item)
+        }
+    }
+    return v
 }
 
 // Helper function to process the JSON and encode binary data to base58
@@ -312,14 +319,8 @@ func grpc_subscribe(conn *grpc.ClientConn) {
 		if err != nil {
 			log.Fatalf("Error occurred in receiving update: %v", err)
 		}
-		// Convert the entire response to JSON
 		jsonStr := protoToJSON(resp)
-
-		// Process the JSON to encode binary data as base58
 		processedJSON := processJSON(jsonStr)
-
-		// transaction := resp.GetTransaction().GetTransaction().String();
-
 		log.Printf("%v\t%v\t%v", timestamp, base58Signature, processedJSON)
 	}
 }
