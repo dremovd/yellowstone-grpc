@@ -112,17 +112,8 @@ func processValue(v interface{}) interface{} {
                     decoded, err := base64.StdEncoding.DecodeString(accounts)
                     if err == nil {
                         accountInts := make([]int, len(decoded))
-                        for i := 0; i < len(decoded); i += 8 {
-                            end := i + 8
-                            if end > len(decoded) {
-                                end = len(decoded)
-                            }
-                            bytes := decoded[i:end]
-                            var value uint64
-                            for j := 0; j < len(bytes); j++ {
-                                value |= uint64(bytes[j]) << (8 * j)
-                            }
-                            accountInts[i/8] = int(value)
+                        for i, b := range decoded {
+                            accountInts[i] = int(b)
                         }
                         val[k] = accountInts
                     }
@@ -135,17 +126,8 @@ func processValue(v interface{}) interface{} {
                                 decoded, err := base64.StdEncoding.DecodeString(accounts)
                                 if err == nil {
                                     accountInts := make([]int, len(decoded))
-                                    for i := 0; i < len(decoded); i += 8 {
-                                        end := i + 8
-                                        if end > len(decoded) {
-                                            end = len(decoded)
-                                        }
-                                        bytes := decoded[i:end]
-                                        var value uint64
-                                        for j := 0; j < len(bytes); j++ {
-                                            value |= uint64(bytes[j]) << (8 * j)
-                                        }
-                                        accountInts[i/8] = int(value)
+                                    for i, b := range decoded {
+                                        accountInts[i] = int(b)
                                     }
                                     instMap["accounts"] = accountInts
                                 }
