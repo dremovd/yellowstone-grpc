@@ -113,7 +113,7 @@ func processValue(v interface{}) interface{} {
                         if instMap, ok := inst.(map[string]interface{}); ok {
                             if accounts, ok := instMap["accounts"].(string); ok {
                                 accountInts := []int{}
-                                accountBytes, _ := base58.Decode(accounts)
+                                accountBytes, _ := hex.DecodeString(accounts)
                                 for _, b := range accountBytes {
                                     accountInts = append(accountInts, int(b))
                                 }
