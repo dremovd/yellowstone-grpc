@@ -187,38 +187,6 @@ func grpc_connect(address string, plaintext bool) *grpc.ClientConn {
 	return conn
 }
 
-var kafkaWriter *kafka.Writer
-
-func initKafkaWriter() {
-	kafkaWriter = kafka.NewWriter(kafka.WriterConfig{
-		Brokers: []string{"panda.infra.degenship.com:19092"},
-		Topic:   "test-signatures",
-		BatchSize: 100,
-		BatchTimeout: 1 * time.Second,
-	})
-}
-
-func sendToKafka(signature []byte) error {
-	base58Signature := base58.Encode(signature)
-	message := kafka.Message{
-		Value: []byte(base58Signature),
-	}
-
-	err := kafkaWriter.WriteMessages(context.Background(), message)
-	if err != nil {
-		return fmt.Errorf("failed to write message: %w", err)
-	}
-
-	return nil
-}
-
-func closeKafkaWriter() {
-	if err := kafkaWriter.Close(); err != nil {
-		log.Printf("Error closing Kafka writer: %v", err)
-	}
-}
-
-
 func grpc_subscribe(conn *grpc.ClientConn) {
 	var err error
 	client := pb.NewGeyserClient(conn)
@@ -342,10 +310,6 @@ func grpc_subscribe(conn *grpc.ClientConn) {
 	var i uint = 0
 	log.Printf("%v\t%v\t%v", "timestamp", "signature", "transaction_json")
 
-	// Initialize Kafka writer
-	initKafkaWriter()
-	defer closeKafkaWriter()
-
 	for i < 1000 {
 		i += 1
 		if i == *resub {
@@ -358,7 +322,7 @@ func grpc_subscribe(conn *grpc.ClientConn) {
 		resp, err := stream.Recv()
 		timestamp := time.Now().UnixNano()
 		signature := resp.GetTransaction().GetTransaction().GetSignature()
-		// base58Signature := base58.Encode(signature)
+		base58Signature := base58.Encode(signature)
 
 		if err == io.EOF {
 			return
@@ -366,17 +330,8 @@ func grpc_subscribe(conn *grpc.ClientConn) {
 		if err != nil {
 			log.Fatalf("Error occurred in receiving update: %v", err)
 		}
-		// jsonStr := protoToJSON(resp)
-		// processedJSON := processJSON(jsonStr)
-		// log.Printf("%v\t%v\t%v", timestamp, base58Signature, processedJSON)
-
-		// Send the signature to Kafka
-		err = sendToKafka(signature)
-		if err != nil {
-			log.Printf("Error sending to Kafka: %v", err)
-		} else {
-			log.Printf("Successfully sent signature to Kafka at timestamp: %v", timestamp)
-		}
-		
+		jsonStr := protoToJSON(resp)
+		processedJSON := processJSON(jsonStr)
+		log.Printf("%v\t%v\t%v", timestamp, base58Signature, processedJSON)		
 	}
 }
