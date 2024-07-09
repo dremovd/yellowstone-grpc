@@ -107,7 +107,7 @@ func processValue(v interface{}) interface{} {
                 continue
             }
             switch k {
-            case "accounts":
+            case "accounts", "writable_indexes", "readonly_indexes":
                 if accounts, ok := item.(string); ok {
                     decoded, err := base64.StdEncoding.DecodeString(accounts)
                     if err == nil {
