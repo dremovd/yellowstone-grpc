@@ -84,14 +84,10 @@ func processValue(v interface{}) interface{} {
         if intVal, err := strconv.ParseInt(val, 10, 64); err == nil {
             return intVal
         }
-        // If not an integer, decode base64 and convert to array of integers
+        // If not an integer, decode base64 and encode to base58
         decoded, err := base64.StdEncoding.DecodeString(val)
         if err == nil {
-            accountInts := make([]int, len(decoded))
-            for i, b := range decoded {
-                accountInts[i] = int(b)
-            }
-            return accountInts
+            return base58.Encode(decoded)
         }
         if len(val) > 0 && (val[0] <= 32 || val[0] >= 127) {
             return base58.Encode([]byte(val))
@@ -111,15 +107,34 @@ func processValue(v interface{}) interface{} {
                 continue
             }
             switch k {
+            case "accounts":
+                if accounts, ok := item.(string); ok {
+                    decoded, err := base64.StdEncoding.DecodeString(accounts)
+                    if err == nil {
+                        accountInts := make([]int, len(decoded))
+                        for i, b := range decoded {
+                            accountInts[i] = int(b)
+                        }
+                        val[k] = accountInts
+                    }
+                }
             case "instructions", "innerInstructions":
                 if instructions, ok := item.([]interface{}); ok {
                     for i, inst := range instructions {
                         if instMap, ok := inst.(map[string]interface{}); ok {
                             if accounts, ok := instMap["accounts"].(string); ok {
-                                instMap["accounts"] = processValue(accounts)
+                                decoded, err := base64.StdEncoding.DecodeString(accounts)
+                                if err == nil {
+                                    accountInts := make([]int, len(decoded))
+                                    for i, b := range decoded {
+                                        accountInts[i] = int(b)
+                                    }
+                                    instMap["accounts"] = accountInts
+                                }
                             }
                             if data, ok := instMap["data"].(string); ok {
-                                instMap["data"] = base58ToHex(data)
+                                decoded, _ := base64.StdEncoding.DecodeString(data)
+                                instMap["data"] = hex.EncodeToString(decoded)
                             }
                         }
                         instructions[i] = inst
@@ -133,6 +148,8 @@ func processValue(v interface{}) interface{} {
     }
     return v
 }
+
+
 
 
 // Helper function to process the JSON and encode binary data to base58
