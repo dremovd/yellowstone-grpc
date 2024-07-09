@@ -7,7 +7,6 @@ import (
 	"encoding/base64"
 
 	"flag"
-	"fmt"
 	"io"
 	"log"
 	"net/url"
@@ -24,8 +23,6 @@ import (
 	"github.com/mr-tron/base58"
 	"github.com/golang/protobuf/jsonpb"
 	"github.com/golang/protobuf/proto"
-	"github.com/segmentio/kafka-go"
-
 )
 
 var (
