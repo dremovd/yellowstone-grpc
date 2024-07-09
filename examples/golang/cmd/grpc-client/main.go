@@ -84,10 +84,14 @@ func processValue(v interface{}) interface{} {
         if intVal, err := strconv.ParseInt(val, 10, 64); err == nil {
             return intVal
         }
-        // If not an integer, decode base64 and encode to base58
+        // If not an integer, decode base64 and convert to array of integers
         decoded, err := base64.StdEncoding.DecodeString(val)
         if err == nil {
-            return base58.Encode(decoded)
+            accountInts := make([]int, len(decoded))
+            for i, b := range decoded {
+                accountInts[i] = int(b)
+            }
+            return accountInts
         }
         if len(val) > 0 && (val[0] <= 32 || val[0] >= 127) {
             return base58.Encode([]byte(val))
@@ -112,11 +116,7 @@ func processValue(v interface{}) interface{} {
                     for i, inst := range instructions {
                         if instMap, ok := inst.(map[string]interface{}); ok {
                             if accounts, ok := instMap["accounts"].(string); ok {
-                                accountInts := []int{}
-                                for _, b := range []byte(accounts) {
-                                    accountInts = append(accountInts, int(b))
-                                }
-                                instMap["accounts"] = accountInts
+                                instMap["accounts"] = processValue(accounts)
                             }
                             if data, ok := instMap["data"].(string); ok {
                                 instMap["data"] = base58ToHex(data)
