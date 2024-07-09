@@ -111,16 +111,18 @@ func processValue(v interface{}) interface{} {
                 if accounts, ok := item.(string); ok {
                     decoded, err := base64.StdEncoding.DecodeString(accounts)
                     if err == nil {
-                        accountInts := make([]uint64, len(decoded)/8)
+                        accountInts := make([]int, len(decoded))
                         for i := 0; i < len(decoded); i += 8 {
-                            accountInts[i/8] = uint64(decoded[i]) |
-                                (uint64(decoded[i+1]) << 8) |
-                                (uint64(decoded[i+2]) << 16) |
-                                (uint64(decoded[i+3]) << 24) |
-                                (uint64(decoded[i+4]) << 32) |
-                                (uint64(decoded[i+5]) << 40) |
-                                (uint64(decoded[i+6]) << 48) |
-                                (uint64(decoded[i+7]) << 56)
+                            end := i + 8
+                            if end > len(decoded) {
+                                end = len(decoded)
+                            }
+                            bytes := decoded[i:end]
+                            var value uint64
+                            for j := 0; j < len(bytes); j++ {
+                                value |= uint64(bytes[j]) << (8 * j)
+                            }
+                            accountInts[i/8] = int(value)
                         }
                         val[k] = accountInts
                     }
@@ -132,9 +134,18 @@ func processValue(v interface{}) interface{} {
                             if accounts, ok := instMap["accounts"].(string); ok {
                                 decoded, err := base64.StdEncoding.DecodeString(accounts)
                                 if err == nil {
-                                    accountInts := make([]uint8, len(decoded))
-                                    for i, b := range decoded {
-                                        accountInts[i] = uint8(b)
+                                    accountInts := make([]int, len(decoded))
+                                    for i := 0; i < len(decoded); i += 8 {
+                                        end := i + 8
+                                        if end > len(decoded) {
+                                            end = len(decoded)
+                                        }
+                                        bytes := decoded[i:end]
+                                        var value uint64
+                                        for j := 0; j < len(bytes); j++ {
+                                            value |= uint64(bytes[j]) << (8 * j)
+                                        }
+                                        accountInts[i/8] = int(value)
                                     }
                                     instMap["accounts"] = accountInts
                                 }
