@@ -85,7 +85,7 @@ func processValue(v interface{}) interface{} {
         if intVal, err := strconv.ParseInt(val, 10, 64); err == nil {
             return intVal
         }
-        // If not an integer, process as before
+        // If not an integer, decode base64 and encode to base58
         decoded, err := base64.StdEncoding.DecodeString(val)
         if err == nil {
             return base58.Encode(decoded)
@@ -93,6 +93,7 @@ func processValue(v interface{}) interface{} {
         if len(val) > 0 && (val[0] <= 32 || val[0] >= 127) {
             return base58.Encode([]byte(val))
         }
+        return val
     case float64:
         if float64(int64(val)) == val {
             return int64(val)
@@ -102,25 +103,32 @@ func processValue(v interface{}) interface{} {
             val[i] = processValue(item)
         }
     case map[string]interface{}:
-        programIdIndex, hasProgramIdIndex := val["programIdIndex"].(string)
         for k, item := range val {
             if item == nil {
                 continue
             }
-            if k == "accounts" && hasProgramIdIndex && (strings.Contains(programIdIndex, "inner_instructions") || strings.Contains(programIdIndex, "message.instructions")) {
-                accounts := []int{}
-                for _, acc := range item.([]interface{}) {
-                    if accStr, ok := acc.(string); ok {
-                        intVal, _ := strconv.Atoi(accStr)
-                        accounts = append(accounts, intVal)
+            switch k {
+            case "instructions", "innerInstructions":
+                if instructions, ok := item.([]interface{}); ok {
+                    for i, inst := range instructions {
+                        if instMap, ok := inst.(map[string]interface{}); ok {
+                            if accounts, ok := instMap["accounts"].(string); ok {
+                                accountInts := []int{}
+                                accountBytes, _ := base58.Decode(accounts)
+                                for _, b := range accountBytes {
+                                    accountInts = append(accountInts, int(b))
+                                }
+                                instMap["accounts"] = accountInts
+                            }
+                            if data, ok := instMap["data"].(string); ok {
+                                instMap["data"] = base58ToHex(data)
+                            }
+                        }
+                        instructions[i] = inst
                     }
+                    val[k] = instructions
                 }
-                val[k] = accounts
-            } else if k == "data" && hasProgramIdIndex && (strings.Contains(programIdIndex, "inner_instructions") || strings.Contains(programIdIndex, "message.instructions")) {
-                if dataStr, ok := item.(string); ok {
-                    val[k] = base58ToHex(dataStr)
-                }
-            } else {
+            default:
                 val[k] = processValue(item)
             }
         }
