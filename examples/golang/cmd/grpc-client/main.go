@@ -113,8 +113,7 @@ func processValue(v interface{}) interface{} {
                         if instMap, ok := inst.(map[string]interface{}); ok {
                             if accounts, ok := instMap["accounts"].(string); ok {
                                 accountInts := []int{}
-                                accountBytes, _ := hex.DecodeString(accounts)
-                                for _, b := range accountBytes {
+                                for _, b := range []byte(accounts) {
                                     accountInts = append(accountInts, int(b))
                                 }
                                 instMap["accounts"] = accountInts
@@ -134,6 +133,7 @@ func processValue(v interface{}) interface{} {
     }
     return v
 }
+
 
 // Helper function to process the JSON and encode binary data to base58
 func processJSON(jsonStr string) string {
