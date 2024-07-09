@@ -102,16 +102,24 @@ func processValue(v interface{}) interface{} {
             val[i] = processValue(item)
         }
     case map[string]interface{}:
+        programIdIndex, hasProgramIdIndex := val["programIdIndex"].(string)
         for k, item := range val {
-            if k == "accounts" && (strings.Contains(val["programIdIndex"].(string), "inner_instructions") || strings.Contains(val["programIdIndex"].(string), "message.instructions")) {
+            if item == nil {
+                continue
+            }
+            if k == "accounts" && hasProgramIdIndex && (strings.Contains(programIdIndex, "inner_instructions") || strings.Contains(programIdIndex, "message.instructions")) {
                 accounts := []int{}
                 for _, acc := range item.([]interface{}) {
-                    intVal, _ := strconv.Atoi(acc.(string))
-                    accounts = append(accounts, intVal)
+                    if accStr, ok := acc.(string); ok {
+                        intVal, _ := strconv.Atoi(accStr)
+                        accounts = append(accounts, intVal)
+                    }
                 }
                 val[k] = accounts
-            } else if k == "data" && (strings.Contains(val["programIdIndex"].(string), "inner_instructions") || strings.Contains(val["programIdIndex"].(string), "message.instructions")) {
-                val[k] = base58ToHex(item.(string))
+            } else if k == "data" && hasProgramIdIndex && (strings.Contains(programIdIndex, "inner_instructions") || strings.Contains(programIdIndex, "message.instructions")) {
+                if dataStr, ok := item.(string); ok {
+                    val[k] = base58ToHex(dataStr)
+                }
             } else {
                 val[k] = processValue(item)
             }
