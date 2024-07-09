@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"encoding/base64"
     "encoding/hex"
-    "strings"
 
 	"flag"
 	"io"
