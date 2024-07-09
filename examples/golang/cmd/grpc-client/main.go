@@ -5,6 +5,8 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"encoding/base64"
+    "encoding/hex"
+    "strings"
 
 	"flag"
 	"io"
@@ -54,6 +56,14 @@ var kacp = keepalive.ClientParameters{
 	PermitWithoutStream: true,             // send pings even without active streams
 }
 
+func base58ToHex(s string) string {
+    decoded, err := base58.Decode(s)
+    if err != nil {
+        return s
+    }
+    return hex.EncodeToString(decoded)
+}
+
 // Helper function to convert protobuf to JSON string
 func protoToJSON(msg proto.Message) string {
 	marshaler := jsonpb.Marshaler{
@@ -93,7 +103,18 @@ func processValue(v interface{}) interface{} {
         }
     case map[string]interface{}:
         for k, item := range val {
-            val[k] = processValue(item)
+            if k == "accounts" && (strings.Contains(val["programIdIndex"].(string), "inner_instructions") || strings.Contains(val["programIdIndex"].(string), "message.instructions")) {
+                accounts := []int{}
+                for _, acc := range item.([]interface{}) {
+                    intVal, _ := strconv.Atoi(acc.(string))
+                    accounts = append(accounts, intVal)
+                }
+                val[k] = accounts
+            } else if k == "data" && (strings.Contains(val["programIdIndex"].(string), "inner_instructions") || strings.Contains(val["programIdIndex"].(string), "message.instructions")) {
+                val[k] = base58ToHex(item.(string))
+            } else {
+                val[k] = processValue(item)
+            }
         }
     }
     return v
