@@ -141,7 +141,7 @@ func processValue(v interface{}) interface{} {
                     }
                     val[k] = instructions
                 }
-            case "mint":
+            case "mint", "owner", "program_id":
                 // Do nothing, leave these values as they are
             default:
                 val[k] = processValue(item)
