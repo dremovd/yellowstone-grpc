@@ -18,6 +18,7 @@ import (
 	"strconv"
 
 	pb "github.com/rpcpool/yellowstone-grpc/examples/golang/proto"
+	"github.com/golang/protobuf/ptypes/timestamp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
@@ -27,6 +28,26 @@ import (
 	"github.com/golang/protobuf/jsonpb"
 	"github.com/golang/protobuf/proto"
 )
+
+type ParsedTransaction struct {
+    DiffMints   []string
+    DiffOwners  []string
+    DiffAmounts []int64
+    AccountKeysExtended []string
+    Signer     string
+    Fee        uint64
+    Signature  string
+    Instructions []ParsedInstruction
+}
+
+type ParsedInstruction struct {
+    OutAmount uint64
+    OutAccounts []string
+    InAmount uint64
+    InAccounts []string
+    PrecedingProgramId string
+    PrecedingAccounts []string
+}
 
 var (
 	grpcAddr           = flag.String("endpoint", "", "Solana gRPC address, in URI format e.g. https://api.rpcpool.com")
@@ -175,60 +196,51 @@ func processJSON(jsonStr string) string {
 	return string(processedJSON)
 }
 
-func parseTransactionNew(data map[string]interface{}) map[string]interface{} {
+func parseTransactionNew(resp *pb.SubscribeUpdate) map[string]interface{} {
     result := make(map[string]interface{})
     
+    transaction := resp.GetTransaction()
+    if transaction == nil {
+        return result
+    }
+
     // Step 1: Parse token balances
-    preBalances := data["meta"].(map[string]interface{})["preTokenBalances"].([]interface{})
-    postBalances := data["meta"].(map[string]interface{})["postTokenBalances"].([]interface{})
-    for i, post := range postBalances {
-        postBalance := post.(map[string]interface{})
-        preBalance := preBalances[i].(map[string]interface{})
-        mint := postBalance["mint"].(string)
-        owner := postBalance["owner"].(string)
-        postAmount, _ := strconv.ParseInt(postBalance["uiTokenAmount"].(map[string]interface{})["amount"].(string), 10, 64)
-        preAmount, _ := strconv.ParseInt(preBalance["uiTokenAmount"].(map[string]interface{})["amount"].(string), 10, 64)
-        diff := postAmount - preAmount
-        result[fmt.Sprintf("diff_mint_%d", i)] = mint
-        result[fmt.Sprintf("diff_owner_%d", i)] = owner
-        result[fmt.Sprintf("diff_amount_%d", i)] = diff
+    for i, post := range transaction.Meta.PostTokenBalances {
+        pre := transaction.Meta.PreTokenBalances[i]
+        result[fmt.Sprintf("diff_mint_%d", i)] = post.Mint
+        result[fmt.Sprintf("diff_owner_%d", i)] = post.Owner
+        postAmount, _ := strconv.ParseInt(post.UiTokenAmount.Amount, 10, 64)
+        preAmount, _ := strconv.ParseInt(pre.UiTokenAmount.Amount, 10, 64)
+        result[fmt.Sprintf("diff_amount_%d", i)] = postAmount - preAmount
     }
     
     // Step 2: Parse account keys
-    accountKeys := data["transaction"].(map[string]interface{})["message"].(map[string]interface{})["accountKeys"].([]interface{})
-    loadedWritable := data["meta"].(map[string]interface{})["loadedWritableAddresses"].([]interface{})
-    loadedReadonly := data["meta"].(map[string]interface{})["loadedReadonlyAddresses"].([]interface{})
-    extendedKeys := append(append(accountKeys, loadedWritable...), loadedReadonly...)
+    accountKeys := transaction.Transaction.Message.AccountKeys
+    extendedKeys := append(append(accountKeys, transaction.Meta.LoadedWritableAddresses...), transaction.Meta.LoadedReadonlyAddresses...)
     for i, key := range extendedKeys {
-        result[fmt.Sprintf("accounts_keys_extended_%d", i)] = key.(string)
+        result[fmt.Sprintf("accounts_keys_extended_%d", i)] = base58.Encode(key)
     }
     
     // Step 3: Get transaction signer
-    result["signer"] = accountKeys[0].(string)
+    result["signer"] = base58.Encode(accountKeys[0])
     
     // Step 4: Get transaction fee
-    result["fee"] = data["meta"].(map[string]interface{})["fee"].(float64)
+    result["fee"] = transaction.Meta.Fee
     
     // Step 5: Get signature
-    result["signature"] = data["transaction"].(map[string]interface{})["signatures"].([]interface{})[0].(string)
+    result["signature"] = base58.Encode(transaction.Transaction.Signatures[0])
     
     // Step 6 & 7: Parse instructions
-    instructions := data["transaction"].(map[string]interface{})["message"].(map[string]interface{})["instructions"].([]interface{})
-    innerInstructions := data["meta"].(map[string]interface{})["innerInstructions"].([]interface{})
-    
     jupiterProgramId := "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4"
     
-    for i, inst := range instructions {
-        instruction := inst.(map[string]interface{})
-        programIdIndex := int(instruction["programIdIndex"].(float64))
-        programId := extendedKeys[programIdIndex].(string)
+    for i, inst := range transaction.Transaction.Message.Instructions {
+        programId := base58.Encode(extendedKeys[inst.ProgramIdIndex])
         
         if programId == jupiterProgramId {
             // Parse inner instructions
-            for _, innerInst := range innerInstructions {
-                if int(innerInst.(map[string]interface{})["index"].(float64)) == i {
-                    innerInstructions := innerInst.(map[string]interface{})["instructions"].([]interface{})
-                    parseSwapInstructions(innerInstructions, extendedKeys, result)
+            for _, innerInst := range transaction.Meta.InnerInstructions {
+                if innerInst.Index == uint32(i) {
+                    parseSwapInstructions(innerInst.Instructions, extendedKeys, result)
                 }
             }
             break
@@ -238,18 +250,18 @@ func parseTransactionNew(data map[string]interface{}) map[string]interface{} {
     return result
 }
 
-func parseSwapInstructions(instructions []interface{}, accountKeys []interface{}, result map[string]interface{}) {
+func parseSwapInstructions(instructions []*pb.InnerInstruction, accountKeys [][]byte, result map[string]interface{}) {
     tokenProgramId := "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
     var pairIndex int
-    var precedingInstruction map[string]interface{}
+    var precedingInstruction *pb.InnerInstruction
     
     for i := 0; i < len(instructions); i++ {
-        instruction := instructions[i].(map[string]interface{})
-        programId := accountKeys[int(instruction["programIdIndex"].(float64))].(string)
+        instruction := instructions[i]
+        programId := base58.Encode(accountKeys[instruction.ProgramIdIndex])
         
         if programId == tokenProgramId {
-            if i > 0 && accountKeys[int(instructions[i-1].(map[string]interface{})["programIdIndex"].(float64))].(string) != tokenProgramId {
-                precedingInstruction = instructions[i-1].(map[string]interface{})
+            if i > 0 && base58.Encode(accountKeys[instructions[i-1].ProgramIdIndex]) != tokenProgramId {
+                precedingInstruction = instructions[i-1]
             } else {
                 continue
             }
@@ -257,30 +269,26 @@ func parseSwapInstructions(instructions []interface{}, accountKeys []interface{}
             // Parse the pair of token program instructions
             outInstruction := instruction
             if i+1 < len(instructions) {
-                inInstruction := instructions[i+1].(map[string]interface{})
+                inInstruction := instructions[i+1]
                 
                 // Extract amounts
-                outAmount := parseInstructionAmount(outInstruction["data"].(string))
-                inAmount := parseInstructionAmount(inInstruction["data"].(string))
+                outAmount := parseInstructionAmount(outInstruction.Data)
+                inAmount := parseInstructionAmount(inInstruction.Data)
                 
                 result[fmt.Sprintf("instruction_out_amount_%d", pairIndex)] = outAmount
                 result[fmt.Sprintf("instruction_in_amount_%d", pairIndex)] = inAmount
                 
                 // Extract accounts
-                outAccounts := outInstruction["accounts"].([]interface{})
-                inAccounts := inInstruction["accounts"].([]interface{})
-                precedingAccounts := precedingInstruction["accounts"].([]interface{})
-                
-                for j, acc := range outAccounts {
-                    result[fmt.Sprintf("instruction_out_accounts_%d_%d", pairIndex, j)] = accountKeys[int(acc.(float64))].(string)
+                for j, acc := range outInstruction.Accounts {
+                    result[fmt.Sprintf("instruction_out_accounts_%d_%d", pairIndex, j)] = base58.Encode(accountKeys[acc])
                 }
-                for j, acc := range inAccounts {
-                    result[fmt.Sprintf("instruction_in_accounts_%d_%d", pairIndex, j)] = accountKeys[int(acc.(float64))].(string)
+                for j, acc := range inInstruction.Accounts {
+                    result[fmt.Sprintf("instruction_in_accounts_%d_%d", pairIndex, j)] = base58.Encode(accountKeys[acc])
                 }
                 
-                result[fmt.Sprintf("instruction_preceeding_program_id_%d", pairIndex)] = accountKeys[int(precedingInstruction["programIdIndex"].(float64))].(string)
-                for j, acc := range precedingAccounts {
-                    result[fmt.Sprintf("instruction_preceeding_accounts_%d_%d", pairIndex, j)] = accountKeys[int(acc.(float64))].(string)
+                result[fmt.Sprintf("instruction_preceeding_program_id_%d", pairIndex)] = base58.Encode(accountKeys[precedingInstruction.ProgramIdIndex])
+                for j, acc := range precedingInstruction.Accounts {
+                    result[fmt.Sprintf("instruction_preceeding_accounts_%d_%d", pairIndex, j)] = base58.Encode(accountKeys[acc])
                 }
                 
                 pairIndex++
@@ -290,9 +298,11 @@ func parseSwapInstructions(instructions []interface{}, accountKeys []interface{}
     }
 }
 
-func parseInstructionAmount(data string) uint64 {
-    decoded, _ := base64.StdEncoding.DecodeString(data)
-    return binary.LittleEndian.Uint64(decoded[2:10])
+func parseInstructionAmount(data []byte) uint64 {
+    if len(data) < 10 {
+        return 0
+    }
+    return binary.LittleEndian.Uint64(data[2:10])
 }
 
 
@@ -498,6 +508,7 @@ func grpc_subscribe(conn *grpc.ClientConn) {
 		timestamp := time.Now().UnixNano()
 		signature := resp.GetTransaction().GetTransaction().GetSignature()
 		base58Signature := base58.Encode(signature)
+		parsedTransactionNew := parseTransactionNew(resp)
 
 		if err == io.EOF {
 			return
@@ -507,6 +518,6 @@ func grpc_subscribe(conn *grpc.ClientConn) {
 		}
 		jsonStr := protoToJSON(resp)
 		processedJSON := processJSON(jsonStr)
-		log.Printf("%v\t%v\t%v", timestamp, base58Signature, processedJSON)		
+		log.Printf("%v\t%v\t%v\t%v", timestamp, base58Signature, parsedTransactionNew, processedJSON)		
 	}
 }
