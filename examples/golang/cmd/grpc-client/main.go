@@ -508,7 +508,7 @@ func grpc_subscribe(conn *grpc.ClientConn) {
 	}
 
 	var i uint = 0
-	log.Printf("%v\t%v\t%v", "timestamp", "signature", "transaction_json")
+	log.Printf("%v\t%v\t%v\t%v", "timestamp", "signature", "transaction_parsed_main", "transaction_json")
 
 	for i < 1000 {
 		i += 1
