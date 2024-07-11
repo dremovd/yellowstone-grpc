@@ -18,7 +18,6 @@ import (
 	"strconv"
 
 	pb "github.com/rpcpool/yellowstone-grpc/examples/golang/proto"
-	"github.com/golang/protobuf/ptypes/timestamp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
@@ -204,43 +203,46 @@ func parseTransactionNew(resp *pb.SubscribeUpdate) map[string]interface{} {
         return result
     }
 
+    // Accessing the transaction data
+    txInfo := transaction.GetTx()
+    if txInfo == nil {
+        return result
+    }
+
     // Step 1: Parse token balances
-    for i, post := range transaction.Meta.PostTokenBalances {
-        pre := transaction.Meta.PreTokenBalances[i]
-        result[fmt.Sprintf("diff_mint_%d", i)] = post.Mint
-        result[fmt.Sprintf("diff_owner_%d", i)] = post.Owner
-        postAmount, _ := strconv.ParseInt(post.UiTokenAmount.Amount, 10, 64)
-        preAmount, _ := strconv.ParseInt(pre.UiTokenAmount.Amount, 10, 64)
-        result[fmt.Sprintf("diff_amount_%d", i)] = postAmount - preAmount
+    for i, post := range txInfo.PostBalances {
+        pre := txInfo.PreBalances[i]
+        result[fmt.Sprintf("diff_balance_%d", i)] = post - pre
     }
     
     // Step 2: Parse account keys
-    accountKeys := transaction.Transaction.Message.AccountKeys
-    extendedKeys := append(append(accountKeys, transaction.Meta.LoadedWritableAddresses...), transaction.Meta.LoadedReadonlyAddresses...)
-    for i, key := range extendedKeys {
-        result[fmt.Sprintf("accounts_keys_extended_%d", i)] = base58.Encode(key)
+    accountKeys := txInfo.GetAccounts()
+    for i, key := range accountKeys {
+        result[fmt.Sprintf("accounts_keys_%d", i)] = base58.Encode(key)
     }
     
-    // Step 3: Get transaction signer
-    result["signer"] = base58.Encode(accountKeys[0])
+    // Step 3: Get transaction signer (assuming the first account is the signer)
+    if len(accountKeys) > 0 {
+        result["signer"] = base58.Encode(accountKeys[0])
+    }
     
     // Step 4: Get transaction fee
-    result["fee"] = transaction.Meta.Fee
+    result["fee"] = txInfo.GetFee()
     
     // Step 5: Get signature
-    result["signature"] = base58.Encode(transaction.Transaction.Signatures[0])
+    result["signature"] = base58.Encode(transaction.GetSignature())
     
     // Step 6 & 7: Parse instructions
     jupiterProgramId := "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4"
     
-    for i, inst := range transaction.Transaction.Message.Instructions {
-        programId := base58.Encode(extendedKeys[inst.ProgramIdIndex])
+    for i, inst := range txInfo.GetInstructions() {
+        programId := base58.Encode(accountKeys[inst.ProgramIdIndex])
         
         if programId == jupiterProgramId {
             // Parse inner instructions
-            for _, innerInst := range transaction.Meta.InnerInstructions {
+            for _, innerInst := range txInfo.GetInnerInstructions() {
                 if innerInst.Index == uint32(i) {
-                    parseSwapInstructions(innerInst.Instructions, extendedKeys, result)
+                    parseSwapInstructions(innerInst.Instructions, accountKeys, result)
                 }
             }
             break
@@ -250,10 +252,10 @@ func parseTransactionNew(resp *pb.SubscribeUpdate) map[string]interface{} {
     return result
 }
 
-func parseSwapInstructions(instructions []*pb.InnerInstruction, accountKeys [][]byte, result map[string]interface{}) {
+func parseSwapInstructions(instructions []*pb.CompiledInstruction, accountKeys [][]byte, result map[string]interface{}) {
     tokenProgramId := "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
     var pairIndex int
-    var precedingInstruction *pb.InnerInstruction
+    var precedingInstruction *pb.CompiledInstruction
     
     for i := 0; i < len(instructions); i++ {
         instruction := instructions[i]
