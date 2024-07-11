@@ -518,6 +518,8 @@ func grpc_subscribe(conn *grpc.ClientConn) {
 		signature := resp.GetTransaction().GetTransaction().GetSignature()
 		base58Signature := base58.Encode(signature)
 		parsedTransactionNew := parseTransactionNew(resp)
+		parsedTransactionJSON, err := json.Marshal(parsedTransactionNew)
+
 
 		if err == io.EOF {
 			return
@@ -527,6 +529,6 @@ func grpc_subscribe(conn *grpc.ClientConn) {
 		}
 		jsonStr := protoToJSON(resp)
 		processedJSON := processJSON(jsonStr)
-		log.Printf("%v\t%v\t%v\t%v", timestamp, base58Signature, parsedTransactionNew, processedJSON)		
+		log.Printf("%v\t%v\t%v\t%v", timestamp, base58Signature, string(parsedTransactionJSON), processedJSON)		
 	}
 }
