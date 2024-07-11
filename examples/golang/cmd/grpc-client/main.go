@@ -209,12 +209,18 @@ func parseTransactionNew(resp *pb.SubscribeUpdate) map[string]interface{} {
     result["slot"] = transaction.Slot
 
     // Step 1: Parse token balances
-    for i, post := range txInfo.Meta.PostTokenBalances {
-        pre := txInfo.Meta.PreTokenBalances[i]
+    preBalances := txInfo.Meta.PreTokenBalances
+    postBalances := txInfo.Meta.PostTokenBalances
+    for i, post := range postBalances {
         result[fmt.Sprintf("diff_mint_%d", i)] = post.Mint
         result[fmt.Sprintf("diff_owner_%d", i)] = post.Owner
         postAmount, _ := strconv.ParseInt(post.UiTokenAmount.Amount, 10, 64)
-        preAmount, _ := strconv.ParseInt(pre.UiTokenAmount.Amount, 10, 64)
+        
+        var preAmount int64
+        if i < len(preBalances) {
+            preAmount, _ = strconv.ParseInt(preBalances[i].UiTokenAmount.Amount, 10, 64)
+        }
+        
         result[fmt.Sprintf("diff_amount_%d", i)] = postAmount - preAmount
     }
     
