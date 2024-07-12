@@ -3,10 +3,10 @@ package main
 import (
 	"context"
 	"crypto/x509"
-	"encoding/json"
 	"encoding/base64"
-    "encoding/hex"
-    "math/big"
+	"encoding/hex"
+	"encoding/json"
+	"math/big"
 
 	"flag"
 	"fmt"
@@ -14,38 +14,38 @@ import (
 	"log"
 	"net/url"
 	"os"
-	"time"
 	"strconv"
+	"time"
 
+	"github.com/golang/protobuf/jsonpb"
+	"github.com/golang/protobuf/proto"
+	"github.com/mr-tron/base58"
 	pb "github.com/rpcpool/yellowstone-grpc/examples/golang/proto"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/metadata"
-	"github.com/mr-tron/base58"
-	"github.com/golang/protobuf/jsonpb"
-	"github.com/golang/protobuf/proto"
 )
 
 type ParsedTransaction struct {
-    DiffMints   []string
-    DiffOwners  []string
-    DiffAmounts []int64
-    AccountKeysExtended []string
-    Signer     string
-    Fee        uint64
-    Signature  string
-    Instructions []ParsedInstruction
+	DiffMints           []string
+	DiffOwners          []string
+	DiffAmounts         []int64
+	AccountKeysExtended []string
+	Signer              string
+	Fee                 uint64
+	Signature           string
+	Instructions        []ParsedInstruction
 }
 
 type ParsedInstruction struct {
-    OutAmount uint64
-    OutAccounts []string
-    InAmount uint64
-    InAccounts []string
-    PrecedingProgramId string
-    PrecedingAccounts []string
+	OutAmount          uint64
+	OutAccounts        []string
+	InAmount           uint64
+	InAccounts         []string
+	PrecedingProgramId string
+	PrecedingAccounts  []string
 }
 
 var (
@@ -78,11 +78,11 @@ var kacp = keepalive.ClientParameters{
 }
 
 func base58ToHex(s string) string {
-    decoded, err := base58.Decode(s)
-    if err != nil {
-        return s
-    }
-    return hex.EncodeToString(decoded)
+	decoded, err := base58.Decode(s)
+	if err != nil {
+		return s
+	}
+	return hex.EncodeToString(decoded)
 }
 
 // Helper function to convert protobuf to JSON string
@@ -100,81 +100,78 @@ func protoToJSON(msg proto.Message) string {
 }
 
 func processValue(v interface{}) interface{} {
-    switch val := v.(type) {
-    case string:
-        // Try to parse as integer first
-        if intVal, err := strconv.ParseInt(val, 10, 64); err == nil {
-            return intVal
-        }
-        // If not an integer, decode base64 and encode to base58
-        decoded, err := base64.StdEncoding.DecodeString(val)
-        if err == nil {
-            return base58.Encode(decoded)
-        }
-        if len(val) > 0 && (val[0] <= 32 || val[0] >= 127) {
-            return base58.Encode([]byte(val))
-        }
-        return val
-    case float64:
-        if float64(int64(val)) == val {
-            return int64(val)
-        }
-    case []interface{}:
-        for i, item := range val {
-            val[i] = processValue(item)
-        }
-    case map[string]interface{}:
-        for k, item := range val {
-            if item == nil {
-                continue
-            }
-            switch k {
-            case "accounts", "writable_indexes", "readonly_indexes":
-                if accounts, ok := item.(string); ok {
-                    decoded, err := base64.StdEncoding.DecodeString(accounts)
-                    if err == nil {
-                        accountInts := make([]int, len(decoded))
-                        for i, b := range decoded {
-                            accountInts[i] = int(b)
-                        }
-                        val[k] = accountInts
-                    }
-                }
-            case "instructions", "innerInstructions":
-                if instructions, ok := item.([]interface{}); ok {
-                    for i, inst := range instructions {
-                        if instMap, ok := inst.(map[string]interface{}); ok {
-                            if accounts, ok := instMap["accounts"].(string); ok {
-                                decoded, err := base64.StdEncoding.DecodeString(accounts)
-                                if err == nil {
-                                    accountInts := make([]int, len(decoded))
-                                    for i, b := range decoded {
-                                        accountInts[i] = int(b)
-                                    }
-                                    instMap["accounts"] = accountInts
-                                }
-                            }
-                            if data, ok := instMap["data"].(string); ok {
-                                decoded, _ := base64.StdEncoding.DecodeString(data)
-                                instMap["data"] = hex.EncodeToString(decoded)
-                            }
-                        }
-                        instructions[i] = inst
-                    }
-                    val[k] = instructions
-                }
-            case "mint", "owner", "program_id":
-                // Do nothing, leave these values as they are
-            default:
-                val[k] = processValue(item)
-            }
-        }
-    }
-    return v
+	switch val := v.(type) {
+	case string:
+		// Try to parse as integer first
+		if intVal, err := strconv.ParseInt(val, 10, 64); err == nil {
+			return intVal
+		}
+		// If not an integer, decode base64 and encode to base58
+		decoded, err := base64.StdEncoding.DecodeString(val)
+		if err == nil {
+			return base58.Encode(decoded)
+		}
+		if len(val) > 0 && (val[0] <= 32 || val[0] >= 127) {
+			return base58.Encode([]byte(val))
+		}
+		return val
+	case float64:
+		if float64(int64(val)) == val {
+			return int64(val)
+		}
+	case []interface{}:
+		for i, item := range val {
+			val[i] = processValue(item)
+		}
+	case map[string]interface{}:
+		for k, item := range val {
+			if item == nil {
+				continue
+			}
+			switch k {
+			case "accounts", "writable_indexes", "readonly_indexes":
+				if accounts, ok := item.(string); ok {
+					decoded, err := base64.StdEncoding.DecodeString(accounts)
+					if err == nil {
+						accountInts := make([]int, len(decoded))
+						for i, b := range decoded {
+							accountInts[i] = int(b)
+						}
+						val[k] = accountInts
+					}
+				}
+			case "instructions", "innerInstructions":
+				if instructions, ok := item.([]interface{}); ok {
+					for i, inst := range instructions {
+						if instMap, ok := inst.(map[string]interface{}); ok {
+							if accounts, ok := instMap["accounts"].(string); ok {
+								decoded, err := base64.StdEncoding.DecodeString(accounts)
+								if err == nil {
+									accountInts := make([]int, len(decoded))
+									for i, b := range decoded {
+										accountInts[i] = int(b)
+									}
+									instMap["accounts"] = accountInts
+								}
+							}
+							if data, ok := instMap["data"].(string); ok {
+								decoded, _ := base64.StdEncoding.DecodeString(data)
+								instMap["data"] = hex.EncodeToString(decoded)
+							}
+						}
+						instructions[i] = inst
+					}
+					val[k] = instructions
+				}
+			case "mint", "owner", "program_id":
+				// Do nothing, leave these values as they are
+			default:
+				val[k] = processValue(item)
+			}
+		}
+	}
+	return v
 }
-
-
-
 
 // Helper function to process the JSON and encode binary data to base58
 func processJSON(jsonStr string) string {
@@ -196,165 +193,165 @@ func processJSON(jsonStr string) string {
 }
 
 func parseTransactionNew(resp *pb.SubscribeUpdate) map[string]interface{} {
-    result := make(map[string]interface{})
-    
-    transaction := resp.GetTransaction()
-    if transaction == nil || transaction.Transaction == nil {
-        return result
-    }
+	result := make(map[string]interface{})
 
-    txInfo := transaction.Transaction
+	transaction := resp.GetTransaction()
+	if transaction == nil || transaction.Transaction == nil {
+		return result
+	}
 
-    // Add slot information
-    result["slot"] = transaction.Slot
+	txInfo := transaction.Transaction
 
-    // Step 1: Parse token balances
-    preBalances := txInfo.Meta.PreTokenBalances
-    postBalances := txInfo.Meta.PostTokenBalances
-    for i, post := range postBalances {
-        result[fmt.Sprintf("diff_mint_%d", i)] = post.Mint
-        result[fmt.Sprintf("diff_owner_%d", i)] = post.Owner
-        postAmount, _ := strconv.ParseInt(post.UiTokenAmount.Amount, 10, 64)
-        
-        var preAmount int64
-        if i < len(preBalances) {
-            preAmount, _ = strconv.ParseInt(preBalances[i].UiTokenAmount.Amount, 10, 64)
-        }
-        
-        result[fmt.Sprintf("diff_amount_%d", i)] = postAmount - preAmount
-    }
-    
-    // Step 2: Parse account keys
-    accountKeys := txInfo.Transaction.Message.AccountKeys
-    extendedKeys := append(append(accountKeys, txInfo.Meta.LoadedWritableAddresses...), txInfo.Meta.LoadedReadonlyAddresses...)
-    for i, key := range extendedKeys {
-        result[fmt.Sprintf("accounts_keys_extended_%d", i)] = base58.Encode(key)
-    }
-    
-    // Step 3: Get transaction signer
-    if len(accountKeys) > 0 {
-        result["signer"] = base58.Encode(accountKeys[0])
-    }
-    
-    // Step 4: Get transaction fee
-    result["fee"] = txInfo.Meta.Fee
-    
-    // Step 5: Get signature
-    if len(txInfo.Transaction.Signatures) > 0 {
-        result["signature"] = base58.Encode(txInfo.Transaction.Signatures[0])
-    }
-    
-    // Step 6 & 7: Parse instructions
-    jupiterProgramId := "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4"
-    
-    for i, inst := range txInfo.Transaction.Message.Instructions {
-        programId := base58.Encode(extendedKeys[inst.ProgramIdIndex])
-        
-        if programId == jupiterProgramId {
-            // Parse inner instructions
-            for _, innerInst := range txInfo.Meta.InnerInstructions {
-                if innerInst.Index == uint32(i) {
-                    parseSwapInstructions(innerInst.Instructions, extendedKeys, result)
-                }
-            }
-            break
-        }
-    }
-    
-    return result
+	// Add slot information
+	result["slot"] = transaction.Slot
+
+	// Step 1: Parse token balances
+	preBalances := txInfo.Meta.PreTokenBalances
+	postBalances := txInfo.Meta.PostTokenBalances
+	for i, post := range postBalances {
+		result[fmt.Sprintf("diff_mint_%d", i)] = post.Mint
+		result[fmt.Sprintf("diff_owner_%d", i)] = post.Owner
+		postAmount, _ := strconv.ParseInt(post.UiTokenAmount.Amount, 10, 64)
+
+		var preAmount int64
+		if i < len(preBalances) {
+			preAmount, _ = strconv.ParseInt(preBalances[i].UiTokenAmount.Amount, 10, 64)
+		}
+
+		result[fmt.Sprintf("diff_amount_%d", i)] = postAmount - preAmount
+	}
+
+	// Step 2: Parse account keys
+	accountKeys := txInfo.Transaction.Message.AccountKeys
+	extendedKeys := append(append(accountKeys, txInfo.Meta.LoadedWritableAddresses...), txInfo.Meta.LoadedReadonlyAddresses...)
+	for i, key := range extendedKeys {
+		result[fmt.Sprintf("accounts_keys_extended_%d", i)] = base58.Encode(key)
+	}
+
+	// Step 3: Get transaction signer
+	if len(accountKeys) > 0 {
+		result["signer"] = base58.Encode(accountKeys[0])
+	}
+
+	// Step 4: Get transaction fee
+	result["fee"] = txInfo.Meta.Fee
+
+	// Step 5: Get signature
+	if len(txInfo.Transaction.Signatures) > 0 {
+		result["signature"] = base58.Encode(txInfo.Transaction.Signatures[0])
+	}
+
+	// Step 6 & 7: Parse instructions
+	jupiterProgramId := "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4"
+
+	for i, inst := range txInfo.Transaction.Message.Instructions {
+		programId := base58.Encode(extendedKeys[inst.ProgramIdIndex])
+
+		if programId == jupiterProgramId {
+			// Parse inner instructions
+			for _, innerInst := range txInfo.Meta.InnerInstructions {
+				if innerInst.Index == uint32(i) {
+					parseSwapInstructions(innerInst.Instructions, extendedKeys, result)
+				}
+			}
+			break
+		}
+	}
+
+	return result
 }
 
 func parseSwapInstructions(instructions []*pb.InnerInstruction, accountKeys [][]byte, result map[string]interface{}) {
-    tokenProgramId := "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
-    var pairIndex int
-    var precedingInstruction *pb.InnerInstruction
-    
-    for i := 0; i < len(instructions); i++ {
-        instruction := instructions[i]
-        programId := base58.Encode(accountKeys[instruction.ProgramIdIndex])
-        
-        if programId == tokenProgramId {
-            if i > 0 && base58.Encode(accountKeys[instructions[i-1].ProgramIdIndex]) != tokenProgramId {
-                precedingInstruction = instructions[i-1]
-            } else {
-                continue
-            }
-            
-            // Parse the pair of token program instructions
-            outInstruction := instruction
-            if i+1 < len(instructions) {
-                inInstruction := instructions[i+1]
-                
-                // Extract amounts
-                outAmount := parseInstructionAmount(outInstruction.Data)
-                inAmount := parseInstructionAmount(inInstruction.Data)
-                
-                result[fmt.Sprintf("instruction_out_amount_%d", pairIndex)] = formatBigIntOrSlice(outAmount)
-                result[fmt.Sprintf("instruction_in_amount_%d", pairIndex)] = formatBigIntOrSlice(inAmount)
-                
-                // Extract accounts
-                for j, acc := range outInstruction.Accounts {
-                    result[fmt.Sprintf("instruction_out_accounts_%d_%d", pairIndex, j)] = base58.Encode(accountKeys[acc])
-                }
-                for j, acc := range inInstruction.Accounts {
-                    result[fmt.Sprintf("instruction_in_accounts_%d_%d", pairIndex, j)] = base58.Encode(accountKeys[acc])
-                }
-                
-                result[fmt.Sprintf("instruction_preceeding_program_id_%d", pairIndex)] = base58.Encode(accountKeys[precedingInstruction.ProgramIdIndex])
-                for j, acc := range precedingInstruction.Accounts {
-                    result[fmt.Sprintf("instruction_preceeding_accounts_%d_%d", pairIndex, j)] = base58.Encode(accountKeys[acc])
-                }
-                
-                pairIndex++
-                i++ // Skip the next instruction as we've already processed it
-            }
-        }
-    }
+	tokenProgramId := "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+	var pairIndex int
+	var precedingInstruction *pb.InnerInstruction
+
+	for i := 0; i < len(instructions); i++ {
+		instruction := instructions[i]
+		programId := base58.Encode(accountKeys[instruction.ProgramIdIndex])
+
+		if programId == tokenProgramId {
+			if i > 0 && base58.Encode(accountKeys[instructions[i-1].ProgramIdIndex]) != tokenProgramId {
+				precedingInstruction = instructions[i-1]
+			} else {
+				continue
+			}
+
+			// Parse the pair of token program instructions
+			outInstruction := instruction
+			if i+1 < len(instructions) {
+				inInstruction := instructions[i+1]
+
+				// Extract amounts
+				outAmount := parseInstructionAmount(outInstruction.Data)
+				inAmount := parseInstructionAmount(inInstruction.Data)
+
+				result[fmt.Sprintf("instruction_out_amount_%d", pairIndex)] = formatBigIntOrSlice(outAmount)
+				result[fmt.Sprintf("instruction_in_amount_%d", pairIndex)] = formatBigIntOrSlice(inAmount)
+
+				// Extract accounts
+				for j, acc := range outInstruction.Accounts {
+					result[fmt.Sprintf("instruction_out_accounts_%d_%d", pairIndex, j)] = base58.Encode(accountKeys[acc])
+				}
+				for j, acc := range inInstruction.Accounts {
+					result[fmt.Sprintf("instruction_in_accounts_%d_%d", pairIndex, j)] = base58.Encode(accountKeys[acc])
+				}
+
+				result[fmt.Sprintf("instruction_preceeding_program_id_%d", pairIndex)] = base58.Encode(accountKeys[precedingInstruction.ProgramIdIndex])
+				for j, acc := range precedingInstruction.Accounts {
+					result[fmt.Sprintf("instruction_preceeding_accounts_%d_%d", pairIndex, j)] = base58.Encode(accountKeys[acc])
+				}
+
+				pairIndex++
+				i++ // Skip the next instruction as we've already processed it
+			}
+		}
+	}
 }
 
 func formatBigIntOrSlice(value interface{}) interface{} {
-    switch v := value.(type) {
-    case *big.Int:
-        return v.String()
-    case []*big.Int:
-        var stringSlice []string
-        for _, bigInt := range v {
-            stringSlice = append(stringSlice, bigInt.String())
-        }
-        return stringSlice
-    default:
-        return nil
-    }
+	switch v := value.(type) {
+	case *big.Int:
+		return v.String()
+	case []*big.Int:
+		var stringSlice []string
+		for _, bigInt := range v {
+			stringSlice = append(stringSlice, bigInt.String())
+		}
+		return stringSlice
+	default:
+		return nil
+	}
 }
 
-
 func parseInstructionAmount(data []byte) interface{} {
-    if len(data) == 18 {
-        // Parse a single 128-bit value
-        return new(big.Int).SetBytes(reverseBytes(data[2:]))
-    } else if len(data) > 18 {
-        // Parse multiple 128-bit values
-        var values []*big.Int
-        for offset := 2; offset < len(data); offset += 16 {
-            if offset+16 <= len(data) {
-                value := new(big.Int).SetBytes(reverseBytes(data[offset : offset+16]))
-                values = append(values, value)
-            }
-        }
-        return values
-    }
-    return nil
+	// Output data as hex 
+	log.Println("Data: ", hex.EncodeToString(data))
+	if len(data) == 18 {
+		// Parse a single 128-bit value
+		return new(big.Int).SetBytes(reverseBytes(data[2:]))
+	} else if len(data) > 18 {
+		// Parse multiple 128-bit values
+		var values []*big.Int
+		for offset := 2; offset < len(data); offset += 16 {
+			if offset+16 <= len(data) {
+				value := new(big.Int).SetBytes(reverseBytes(data[offset : offset+16]))
+				values = append(values, value)
+			}
+		}
+		return values
+	}
+	return nil
 }
 
 // Helper function to reverse byte order (convert from little-endian to big-endian)
 func reverseBytes(b []byte) []byte {
-    reversed := make([]byte, len(b))
-    for i := 0; i < len(b); i++ {
-        reversed[i] = b[len(b)-1-i]
-    }
-    return reversed
+	reversed := make([]byte, len(b))
+	for i := 0; i < len(b); i++ {
+		reversed[i] = b[len(b)-1-i]
+	}
+	return reversed
 }
-
 
 func main() {
 	log.SetFlags(0)
@@ -561,7 +558,6 @@ func grpc_subscribe(conn *grpc.ClientConn) {
 		parsedTransactionNew := parseTransactionNew(resp)
 		parsedTransactionJSON, err := json.Marshal(parsedTransactionNew)
 
-
 		if err == io.EOF {
 			return
 		}
@@ -570,6 +566,6 @@ func grpc_subscribe(conn *grpc.ClientConn) {
 		}
 		jsonStr := protoToJSON(resp)
 		processedJSON := processJSON(jsonStr)
-		log.Printf("%v\t%v\t%v\t%v", timestamp, base58Signature, string(parsedTransactionJSON), processedJSON)		
+		log.Printf("%v\t%v\t%v\t%v", timestamp, base58Signature, string(parsedTransactionJSON), processedJSON)
 	}
 }
