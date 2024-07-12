@@ -297,7 +297,7 @@ func parseSwapInstructions(instructions []*pb.InnerInstruction, accountKeys [][]
 func parseInstructionAmount(data []byte) interface{} {
 	// Output data as hex
 	log.Println("Data: ", hex.EncodeToString(data))
-	if len(data) < 10 { // 2 bytes prefix + 8 bytes for uint64
+	if len(data) <= 10 { // 2 bytes prefix + 8 bytes for uint64
 		return 0
 	}
 	value := binary.LittleEndian.Uint64(data[2:10])
