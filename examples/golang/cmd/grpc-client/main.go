@@ -277,18 +277,24 @@ func parseSwapInstructions(instructions []*pb.InnerInstruction, accountKeys [][]
 				continue
 			}
 
-			// Find the last instruction in the sequence
-			lastInstructionIndex := i
-			for j := i + 1; j < len(instructions); j++ {
-				if base58.Encode(accountKeys[instructions[j].ProgramIdIndex]) != tokenProgramId {
-					break
+			// Check if it's a pair or triple
+			var outInstruction, inInstruction *pb.InnerInstruction
+			if i+1 < len(instructions) && base58.Encode(accountKeys[instructions[i+1].ProgramIdIndex]) == tokenProgramId {
+				if i+2 < len(instructions) && base58.Encode(accountKeys[instructions[i+2].ProgramIdIndex]) == tokenProgramId {
+					// It's a triple
+					outInstruction = instruction
+					inInstruction = instructions[i+2]
+					i += 2 // Skip the next two instructions
+				} else {
+					// It's a pair
+					outInstruction = instruction
+					inInstruction = instructions[i+1]
+					i++ // Skip the next instruction
 				}
-				lastInstructionIndex = j
+			} else {
+				// Not a pair or triple, skip
+				continue
 			}
-
-			// Parse the first and last token program instructions
-			outInstruction := instruction
-			inInstruction := instructions[lastInstructionIndex]
 
 			// Extract amounts
 			outAmount := parseInstructionAmount(outInstruction.Data)
@@ -311,7 +317,6 @@ func parseSwapInstructions(instructions []*pb.InnerInstruction, accountKeys [][]
 			}
 
 			pairIndex++
-			i = lastInstructionIndex // Skip to the last instruction in the sequence
 		}
 	}
 }
