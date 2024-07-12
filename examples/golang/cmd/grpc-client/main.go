@@ -289,8 +289,8 @@ func parseSwapInstructions(instructions []*pb.InnerInstruction, accountKeys [][]
                 outAmount := parseInstructionAmount(outInstruction.Data)
                 inAmount := parseInstructionAmount(inInstruction.Data)
                 
-                result[fmt.Sprintf("instruction_out_amount_%d", pairIndex)] = outAmount
-                result[fmt.Sprintf("instruction_in_amount_%d", pairIndex)] = inAmount
+                result[fmt.Sprintf("instruction_out_amount_%d", pairIndex)] = formatBigIntOrSlice(outAmount)
+                result[fmt.Sprintf("instruction_in_amount_%d", pairIndex)] = formatBigIntOrSlice(inAmount)
                 
                 // Extract accounts
                 for j, acc := range outInstruction.Accounts {
@@ -312,12 +312,47 @@ func parseSwapInstructions(instructions []*pb.InnerInstruction, accountKeys [][]
     }
 }
 
-
-func parseInstructionAmount(data []byte) uint64 {
-    if len(data) < 10 {
-        return 0
+func formatBigIntOrSlice(value interface{}) interface{} {
+    switch v := value.(type) {
+    case *big.Int:
+        return v.String()
+    case []*big.Int:
+        var stringSlice []string
+        for _, bigInt := range v {
+            stringSlice = append(stringSlice, bigInt.String())
+        }
+        return stringSlice
+    default:
+        return nil
     }
-    return binary.LittleEndian.Uint64(data[2:10])
+}
+
+
+func parseInstructionAmount(data []byte) interface{} {
+    if len(data) == 18 {
+        // Parse a single 128-bit value
+        return new(big.Int).SetBytes(reverseBytes(data[2:]))
+    } else if len(data) > 18 {
+        // Parse multiple 128-bit values
+        var values []*big.Int
+        for offset := 2; offset < len(data); offset += 16 {
+            if offset+16 <= len(data) {
+                value := new(big.Int).SetBytes(reverseBytes(data[offset : offset+16]))
+                values = append(values, value)
+            }
+        }
+        return values
+    }
+    return nil
+}
+
+// Helper function to reverse byte order (convert from little-endian to big-endian)
+func reverseBytes(b []byte) []byte {
+    reversed := make([]byte, len(b))
+    for i := 0; i < len(b); i++ {
+        reversed[i] = b[len(b)-1-i]
+    }
+    return reversed
 }
 
 
