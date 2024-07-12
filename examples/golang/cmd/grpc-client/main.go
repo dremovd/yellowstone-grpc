@@ -261,64 +261,85 @@ func parseTransactionNew(resp *pb.SubscribeUpdate) map[string]interface{} {
 	return result
 }
 
+type TokenInstructionChain struct {
+	PrecedingInstruction *pb.InnerInstruction
+	Instructions         []*pb.InnerInstruction
+}
+
 func parseSwapInstructions(instructions []*pb.InnerInstruction, accountKeys [][]byte, result map[string]interface{}) {
 	tokenProgramId := "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
-	var pairIndex int
-	var precedingInstruction *pb.InnerInstruction
+	var chains []TokenInstructionChain
+	var currentChain TokenInstructionChain
 
 	for i := 0; i < len(instructions); i++ {
 		instruction := instructions[i]
 		programId := base58.Encode(accountKeys[instruction.ProgramIdIndex])
 
 		if programId == tokenProgramId {
-			if i > 0 && base58.Encode(accountKeys[instructions[i-1].ProgramIdIndex]) != tokenProgramId {
-				precedingInstruction = instructions[i-1]
-			} else {
-				continue
+			if len(currentChain.Instructions) == 0 && i > 0 {
+				currentChain.PrecedingInstruction = instructions[i-1]
 			}
-
-			// Check if it's a pair or triple
-			var outInstruction, inInstruction *pb.InnerInstruction
-			if i+1 < len(instructions) && base58.Encode(accountKeys[instructions[i+1].ProgramIdIndex]) == tokenProgramId {
-				if i+2 < len(instructions) && base58.Encode(accountKeys[instructions[i+2].ProgramIdIndex]) == tokenProgramId {
-					// It's a triple
-					outInstruction = instruction
-					inInstruction = instructions[i+2]
-					i += 2 // Skip the next two instructions
-				} else {
-					// It's a pair
-					outInstruction = instruction
-					inInstruction = instructions[i+1]
-					i++ // Skip the next instruction
-				}
-			} else {
-				// Not a pair or triple, skip
-				continue
+			currentChain.Instructions = append(currentChain.Instructions, instruction)
+		} else {
+			if len(currentChain.Instructions) > 0 {
+				chains = append(chains, currentChain)
+				currentChain = TokenInstructionChain{}
 			}
-
-			// Extract amounts
-			outAmount := parseInstructionAmount(outInstruction.Data)
-			inAmount := parseInstructionAmount(inInstruction.Data)
-
-			result[fmt.Sprintf("instruction_out_amount_%d", pairIndex)] = outAmount
-			result[fmt.Sprintf("instruction_in_amount_%d", pairIndex)] = inAmount
-
-			// Extract accounts
-			for j, acc := range outInstruction.Accounts {
-				result[fmt.Sprintf("instruction_out_accounts_%d_%d", pairIndex, j)] = base58.Encode(accountKeys[acc])
-			}
-			for j, acc := range inInstruction.Accounts {
-				result[fmt.Sprintf("instruction_in_accounts_%d_%d", pairIndex, j)] = base58.Encode(accountKeys[acc])
-			}
-
-			result[fmt.Sprintf("instruction_preceeding_program_id_%d", pairIndex)] = base58.Encode(accountKeys[precedingInstruction.ProgramIdIndex])
-			for j, acc := range precedingInstruction.Accounts {
-				result[fmt.Sprintf("instruction_preceeding_accounts_%d_%d", pairIndex, j)] = base58.Encode(accountKeys[acc])
-			}
-
-			pairIndex++
 		}
 	}
+
+	// Add the last chain if it's not empty
+	if len(currentChain.Instructions) > 0 {
+		chains = append(chains, currentChain)
+	}
+
+	// Create swap_events list
+	swapEvents := make([]map[string]interface{}, 0)
+
+	// Process the collected chains
+	for _, chain := range chains {
+		if len(chain.Instructions) < 2 {
+			continue // Skip chains with less than 2 instructions
+		}
+
+		chainEvent := make(map[string]interface{})
+
+		// Process preceding instruction
+		if chain.PrecedingInstruction != nil {
+			chainEvent["preceding_program_id"] = base58.Encode(accountKeys[chain.PrecedingInstruction.ProgramIdIndex])
+			precedingAccounts := make([]string, len(chain.PrecedingInstruction.Accounts))
+			for j, acc := range chain.PrecedingInstruction.Accounts {
+				precedingAccounts[j] = base58.Encode(accountKeys[acc])
+			}
+			chainEvent["preceding_accounts"] = precedingAccounts
+		}
+
+		// Process all instructions in the chain
+		chainInstructions := make([]map[string]interface{}, len(chain.Instructions))
+		for instIndex, instruction := range chain.Instructions {
+			instData := make(map[string]interface{})
+
+			// Extract amount
+			instData["amount"] = parseInstructionAmount(instruction.Data)
+
+			// Extract accounts
+			instAccounts := make([]string, len(instruction.Accounts))
+			for accIndex, acc := range instruction.Accounts {
+				instAccounts[accIndex] = base58.Encode(accountKeys[acc])
+			}
+			instData["accounts"] = instAccounts
+
+			chainInstructions[instIndex] = instData
+		}
+
+		chainEvent["instructions"] = chainInstructions
+		chainEvent["length"] = len(chain.Instructions)
+
+		swapEvents = append(swapEvents, chainEvent)
+	}
+
+	// Add swap_events to the result
+	result["swap_events"] = swapEvents
 }
 
 func parseInstructionAmount(data []byte) interface{} {
