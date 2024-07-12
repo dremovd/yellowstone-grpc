@@ -4,10 +4,9 @@ import (
 	"context"
 	"crypto/x509"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
-	"encoding/binary"
-	"math/big"
 
 	"flag"
 	"fmt"
@@ -263,47 +262,49 @@ func parseTransactionNew(resp *pb.SubscribeUpdate) map[string]interface{} {
 }
 
 func parseSwapInstructions(instructions []*pb.InnerInstruction, accountKeys [][]byte, result map[string]interface{}) {
-    tokenProgramId := "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
-    var events []map[string]interface{}
-    
-    for i := 0; i < len(instructions)-1; i++ {
-        instruction := instructions[i]
-        nextInstruction := instructions[i+1]
-        
-        if base58.Encode(accountKeys[instruction.ProgramIdIndex]) == tokenProgramId &&
-           base58.Encode(accountKeys[nextInstruction.ProgramIdIndex]) == tokenProgramId {
-            
-            outAmount := parseInstructionAmount(instruction.Data)
-            inAmount := parseInstructionAmount(nextInstruction.Data)
-            
-            event := map[string]interface{}{
-                "name": "SwapEvent",
-                "data": map[string]interface{}{
-                    "amm":          base58.Encode(accountKeys[instruction.Accounts[0]]),
-                    "inputMint":    base58.Encode(accountKeys[instruction.Accounts[1]]),
-                    "inputAmount":  outAmount,
-                    "outputMint":   base58.Encode(accountKeys[nextInstruction.Accounts[1]]),
-                    "outputAmount": inAmount,
-                },
-            }
-            
-            events = append(events, event)
-            i++ // Skip the next instruction as we've already processed it
-        }
-    }
-    
-    result["events"] = events
+	tokenProgramId := "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+	var events []map[string]interface{}
+
+	for i := 0; i < len(instructions)-1; i++ {
+		instruction := instructions[i]
+		nextInstruction := instructions[i+1]
+
+		if base58.Encode(accountKeys[instruction.ProgramIdIndex]) == tokenProgramId &&
+			base58.Encode(accountKeys[nextInstruction.ProgramIdIndex]) == tokenProgramId {
+
+			outAmount := parseInstructionAmount(instruction.Data)
+			inAmount := parseInstructionAmount(nextInstruction.Data)
+
+			event := map[string]interface{}{
+				"name": "SwapEvent",
+				"data": map[string]interface{}{
+					"amm":          base58.Encode(accountKeys[instruction.Accounts[0]]),
+					"inputMint":    base58.Encode(accountKeys[instruction.Accounts[1]]),
+					"inputAmount":  outAmount,
+					"outputMint":   base58.Encode(accountKeys[nextInstruction.Accounts[1]]),
+					"outputAmount": inAmount,
+				},
+			}
+
+			events = append(events, event)
+			i++ // Skip the next instruction as we've already processed it
+		}
+	}
+
+	result["events"] = events
 }
 
 func parseInstructionAmount(data []byte) interface{} {
-	// Output data as hex 
+	// Output data as hex
 	log.Println("Data: ", hex.EncodeToString(data))
-    if len(data) < 10 { // 2 bytes prefix + 8 bytes for uint64
-        return 0
-    }
-    
-    // Skip the first 2 bytes and read the next 8 bytes as little-endian uint64
-    return binary.LittleEndian.Uint64(data[2:10])
+	if len(data) < 10 { // 2 bytes prefix + 8 bytes for uint64
+		return 0
+	}
+	value := binary.LittleEndian.Uint64(data[2:10])
+	log.Println("Value: ", value)
+
+	// Skip the first 2 bytes and read the next 8 bytes as little-endian uint64
+	return value
 }
 
 // Helper function to reverse byte order (convert from little-endian to big-endian)
