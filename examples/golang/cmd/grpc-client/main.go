@@ -262,51 +262,52 @@ func parseTransactionNew(resp *pb.SubscribeUpdate) map[string]interface{} {
 }
 
 func parseSwapInstructions(instructions []*pb.InnerInstruction, accountKeys [][]byte, result map[string]interface{}) {
-    tokenProgramId := "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
-    var pairIndex int
-    var precedingInstruction *pb.InnerInstruction
-    
-    for i := 0; i < len(instructions); i++ {
-        instruction := instructions[i]
-        programId := base58.Encode(accountKeys[instruction.ProgramIdIndex])
-        
-        if programId == tokenProgramId {
-            if i > 0 && base58.Encode(accountKeys[instructions[i-1].ProgramIdIndex]) != tokenProgramId {
-                precedingInstruction = instructions[i-1]
-            } else {
-                continue
-            }
-            
-            // Parse the pair of token program instructions
-            outInstruction := instruction
-            if i+1 < len(instructions) {
-                inInstruction := instructions[i+1]
-                
-                // Extract amounts
-                outAmount := parseInstructionAmount(outInstruction.Data)
-                inAmount := parseInstructionAmount(inInstruction.Data)
-                
-                result[fmt.Sprintf("instruction_out_amount_%d", pairIndex)] = outAmount
-                result[fmt.Sprintf("instruction_in_amount_%d", pairIndex)] = inAmount
-                
-                // Extract accounts
-                for j, acc := range outInstruction.Accounts {
-                    result[fmt.Sprintf("instruction_out_accounts_%d_%d", pairIndex, j)] = base58.Encode(accountKeys[acc])
-                }
-                for j, acc := range inInstruction.Accounts {
-                    result[fmt.Sprintf("instruction_in_accounts_%d_%d", pairIndex, j)] = base58.Encode(accountKeys[acc])
-                }
-                
-                result[fmt.Sprintf("instruction_preceeding_program_id_%d", pairIndex)] = base58.Encode(accountKeys[precedingInstruction.ProgramIdIndex])
-                for j, acc := range precedingInstruction.Accounts {
-                    result[fmt.Sprintf("instruction_preceeding_accounts_%d_%d", pairIndex, j)] = base58.Encode(accountKeys[acc])
-                }
-                
-                pairIndex++
-                i++ // Skip the next instruction as we've already processed it
-            }
-        }
-    }
+	tokenProgramId := "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+	var pairIndex int
+	var precedingInstruction *pb.InnerInstruction
+
+	for i := 0; i < len(instructions); i++ {
+		instruction := instructions[i]
+		programId := base58.Encode(accountKeys[instruction.ProgramIdIndex])
+
+		if programId == tokenProgramId {
+			if i > 0 && base58.Encode(accountKeys[instructions[i-1].ProgramIdIndex]) != tokenProgramId {
+				precedingInstruction = instructions[i-1]
+			} else {
+				continue
+			}
+
+			// Parse the pair of token program instructions
+			outInstruction := instruction
+			if i+1 < len(instructions) {
+				inInstruction := instructions[i+1]
+
+				// Extract amounts
+				outAmount := parseInstructionAmount(outInstruction.Data)
+				inAmount := parseInstructionAmount(inInstruction.Data)
+
+				result[fmt.Sprintf("instruction_out_amount_%d", pairIndex)] = outAmount
+				result[fmt.Sprintf("instruction_in_amount_%d", pairIndex)] = inAmount
+
+				// Extract accounts
+				for j, acc := range outInstruction.Accounts {
+					result[fmt.Sprintf("instruction_out_accounts_%d_%d", pairIndex, j)] = base58.Encode(accountKeys[acc])
+				}
+				for j, acc := range inInstruction.Accounts {
+					result[fmt.Sprintf("instruction_in_accounts_%d_%d", pairIndex, j)] = base58.Encode(accountKeys[acc])
+				}
+
+				result[fmt.Sprintf("instruction_preceeding_program_id_%d", pairIndex)] = base58.Encode(accountKeys[precedingInstruction.ProgramIdIndex])
+				for j, acc := range precedingInstruction.Accounts {
+					result[fmt.Sprintf("instruction_preceeding_accounts_%d_%d", pairIndex, j)] = base58.Encode(accountKeys[acc])
+				}
+
+				pairIndex++
+				i++ // Skip the next instruction as we've already processed it
+			}
+		}
+	}
+}
 
 func parseInstructionAmount(data []byte) interface{} {
 	// Output data as hex
