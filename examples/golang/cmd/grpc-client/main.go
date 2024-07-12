@@ -307,33 +307,23 @@ func parseSwapInstructions(instructions []*pb.InnerInstruction, accountKeys [][]
 		// Process preceding instruction
 		if chain.PrecedingInstruction != nil {
 			chainEvent["preceding_program_id"] = base58.Encode(accountKeys[chain.PrecedingInstruction.ProgramIdIndex])
-			precedingAccounts := make([]string, len(chain.PrecedingInstruction.Accounts))
 			for j, acc := range chain.PrecedingInstruction.Accounts {
-				precedingAccounts[j] = base58.Encode(accountKeys[acc])
+				chainEvent[fmt.Sprintf("preceding_account_%d", j)] = base58.Encode(accountKeys[acc])
 			}
-			chainEvent["preceding_accounts"] = precedingAccounts
 		}
 
 		// Process all instructions in the chain
-		chainInstructions := make([]map[string]interface{}, len(chain.Instructions))
 		for instIndex, instruction := range chain.Instructions {
-			instData := make(map[string]interface{})
-
 			// Extract amount
-			instData["amount"] = parseInstructionAmount(instruction.Data)
+			chainEvent[fmt.Sprintf("instruction_%d_amount", instIndex)] = parseInstructionAmount(instruction.Data)
 
 			// Extract accounts
-			instAccounts := make([]string, len(instruction.Accounts))
 			for accIndex, acc := range instruction.Accounts {
-				instAccounts[accIndex] = base58.Encode(accountKeys[acc])
+				chainEvent[fmt.Sprintf("instruction_%d_account_%d", instIndex, accIndex)] = base58.Encode(accountKeys[acc])
 			}
-			instData["accounts"] = instAccounts
-
-			chainInstructions[instIndex] = instData
 		}
 
-		chainEvent["instructions"] = chainInstructions
-		chainEvent["length"] = len(chain.Instructions)
+		chainEvent["chain_length"] = len(chain.Instructions)
 
 		swapEvents = append(swapEvents, chainEvent)
 	}
