@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"encoding/binary"
 	"math/big"
 
 	"flag"
@@ -262,86 +263,47 @@ func parseTransactionNew(resp *pb.SubscribeUpdate) map[string]interface{} {
 }
 
 func parseSwapInstructions(instructions []*pb.InnerInstruction, accountKeys [][]byte, result map[string]interface{}) {
-	tokenProgramId := "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
-	var pairIndex int
-	var precedingInstruction *pb.InnerInstruction
-
-	for i := 0; i < len(instructions); i++ {
-		instruction := instructions[i]
-		programId := base58.Encode(accountKeys[instruction.ProgramIdIndex])
-
-		if programId == tokenProgramId {
-			if i > 0 && base58.Encode(accountKeys[instructions[i-1].ProgramIdIndex]) != tokenProgramId {
-				precedingInstruction = instructions[i-1]
-			} else {
-				continue
-			}
-
-			// Parse the pair of token program instructions
-			outInstruction := instruction
-			if i+1 < len(instructions) {
-				inInstruction := instructions[i+1]
-
-				// Extract amounts
-				outAmount := parseInstructionAmount(outInstruction.Data)
-				inAmount := parseInstructionAmount(inInstruction.Data)
-
-				result[fmt.Sprintf("instruction_out_amount_%d", pairIndex)] = formatBigIntOrSlice(outAmount)
-				result[fmt.Sprintf("instruction_in_amount_%d", pairIndex)] = formatBigIntOrSlice(inAmount)
-
-				// Extract accounts
-				for j, acc := range outInstruction.Accounts {
-					result[fmt.Sprintf("instruction_out_accounts_%d_%d", pairIndex, j)] = base58.Encode(accountKeys[acc])
-				}
-				for j, acc := range inInstruction.Accounts {
-					result[fmt.Sprintf("instruction_in_accounts_%d_%d", pairIndex, j)] = base58.Encode(accountKeys[acc])
-				}
-
-				result[fmt.Sprintf("instruction_preceeding_program_id_%d", pairIndex)] = base58.Encode(accountKeys[precedingInstruction.ProgramIdIndex])
-				for j, acc := range precedingInstruction.Accounts {
-					result[fmt.Sprintf("instruction_preceeding_accounts_%d_%d", pairIndex, j)] = base58.Encode(accountKeys[acc])
-				}
-
-				pairIndex++
-				i++ // Skip the next instruction as we've already processed it
-			}
-		}
-	}
-}
-
-func formatBigIntOrSlice(value interface{}) interface{} {
-	switch v := value.(type) {
-	case *big.Int:
-		return v.String()
-	case []*big.Int:
-		var stringSlice []string
-		for _, bigInt := range v {
-			stringSlice = append(stringSlice, bigInt.String())
-		}
-		return stringSlice
-	default:
-		return nil
-	}
+    tokenProgramId := "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+    var events []map[string]interface{}
+    
+    for i := 0; i < len(instructions)-1; i++ {
+        instruction := instructions[i]
+        nextInstruction := instructions[i+1]
+        
+        if base58.Encode(accountKeys[instruction.ProgramIdIndex]) == tokenProgramId &&
+           base58.Encode(accountKeys[nextInstruction.ProgramIdIndex]) == tokenProgramId {
+            
+            outAmount := parseInstructionAmount(instruction.Data)
+            inAmount := parseInstructionAmount(nextInstruction.Data)
+            
+            event := map[string]interface{}{
+                "name": "SwapEvent",
+                "data": map[string]interface{}{
+                    "amm":          base58.Encode(accountKeys[instruction.Accounts[0]]),
+                    "inputMint":    base58.Encode(accountKeys[instruction.Accounts[1]]),
+                    "inputAmount":  outAmount,
+                    "outputMint":   base58.Encode(accountKeys[nextInstruction.Accounts[1]]),
+                    "outputAmount": inAmount,
+                },
+            }
+            
+            events = append(events, event)
+            i++ // Skip the next instruction as we've already processed it
+        }
+    }
+    
+    result["events"] = events
 }
 
 func parseInstructionAmount(data []byte) interface{} {
 	// Output data as hex 
 	log.Println("Data: ", hex.EncodeToString(data))
-	if len(data) == 18 {
-		// Parse a single 128-bit value
-		return new(big.Int).SetBytes(reverseBytes(data[2:]))
-	} else if len(data) > 18 {
-		// Parse multiple 128-bit values
-		var values []*big.Int
-		for offset := 2; offset < len(data); offset += 16 {
-			if offset+16 <= len(data) {
-				value := new(big.Int).SetBytes(reverseBytes(data[offset : offset+16]))
-				values = append(values, value)
-			}
-		}
-		return values
-	}
-	return nil
+    if len(data) < 10 { // 2 bytes prefix + 8 bytes for uint64
+        return 0
+    }
+    
+    // Skip the first 2 bytes and read the next 8 bytes as little-endian uint64
+    return binary.LittleEndian.Uint64(data[2:10])
 }
 
 // Helper function to reverse byte order (convert from little-endian to big-endian)
