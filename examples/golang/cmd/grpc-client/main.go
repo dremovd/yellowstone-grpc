@@ -65,6 +65,8 @@ var (
 	voteTransactions   = flag.Bool("transactions-vote", false, "Include vote transactions")
 	failedTransactions = flag.Bool("transactions-failed", false, "Include failed transactions")
 
+	transactionCount = flag.Uint("count", 1000, "Number of transactions to process")
+
 	accountsFilter              arrayFlags
 	accountOwnersFilter         arrayFlags
 	transactionsAccountsInclude arrayFlags
@@ -542,7 +544,7 @@ func grpc_subscribe(conn *grpc.ClientConn) {
 	var i uint = 0
 	log.Printf("%v\t%v\t%v\t%v", "timestamp", "signature", "transaction_parsed_main", "transaction_json")
 
-	for i < 1000 {
+	for i < *transactionCount {
 		i += 1
 		if i == *resub {
 			subscription = pb.SubscribeRequest{}
